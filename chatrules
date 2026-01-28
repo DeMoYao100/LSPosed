@@ -1,0 +1,167 @@
+# LSPosed项目会话记录
+
+## 会话1: 寻找模块注入应用选择相关代码 (2026-01-28)
+
+### 会话目的
+查找LSPosed模块中关于模块注入应用选择的相关代码，为后续修改实现自定义选择应用来注入做准备。
+
+### 完成的主要任务
+1. 探索了LSPosed项目的整体结构
+2. 通过语义搜索和关键词搜索定位到核心代码文件
+3. 详细分析了模块作用域选择的完整实现流程
+4. 整理了关键代码位置和功能说明
+
+### 关键发现和核心代码位置
+
+#### 1. 数据存储层 (daemon层)
+**文件**: `daemon/src/main/java/org/lsposed/lspd/service/ConfigManager.java`
+
+**数据库表结构**:
+- `modules` 表: 存储模块信息 (mid, module_pkg_name, apk_path, enabled)
+- `scope` 表: 存储模块作用域 (mid, app_pkg_name, user_id)
+  - 通过外键关联到modules表
+  - 主键为三元组 (mid, app_pkg_name, user_id)
+
+**关键方法**:
+- `setModuleScope(String packageName, List<Application> scopes)`: 设置模块的作用域
+  - 删除旧的作用域记录
+  - 插入新的作用域记录
+  - 触发缓存更新
+- `getModuleScope(String packageName)`: 从数据库查询模块作用域
+- `cacheScopes()`: 将数据库中的作用域缓存到内存 (cachedScope)
+- `getModulesForProcess(String processName, int uid)`: 当进程启动时，根据缓存判断需要注入哪些模块
+- `shouldSkipProcess(ProcessScope scope)`: 判断是否跳过某个进程的注入
+
+#### 2. UI层 (app层)
+**文件**: `app/src/main/java/org/lsposed/manager/adapters/ScopeAdapter.java`
+
+**功能**: RecyclerView适配器，显示应用列表并允许用户选择
+
+**关键方法**:
+- `refresh(boolean force)`: 加载已安装应用列表和已选择的作用域
+  - 调用 ConfigManager.getModuleScope() 获取已选择的应用
+  - 过滤并排序应用列表
+  - 支持推荐列表（模块声明的scope list）
+- `onCheckedChange()`: 处理用户勾选/取消勾选应用
+  - 更新checkedList
+  - 调用 ConfigManager.setModuleScope() 保存到服务端
+
+**文件**: `app/src/main/java/org/lsposed/manager/ui/fragment/AppListFragment.java`
+- Fragment界面，包含搜索、刷新、备份/恢复等功能
+- 使用ScopeAdapter显示应用列表
+
+#### 3. 客户端管理层
+**文件**: `app/src/main/java/org/lsposed/manager/ConfigManager.java`
+
+**功能**: 客户端与daemon服务通信的中间层
+
+**关键方法**:
+- `setModuleScope(String packageName, boolean legacy, Set<ApplicationWithEquals> applications)`: 
+  - 将UI层的选择转换为Application列表
+  - 通过Binder调用daemon的setModuleScope
+- `getModuleScope(String packageName)`: 从daemon获取模块作用域
+
+#### 4. AIDL接口定义
+**文件**: `services/manager-service/src/main/aidl/org/lsposed/lspd/ILSPManagerService.aidl`
+- `boolean setModuleScope(String packageName, in List<Application> scope)`
+- `List<Application> getModuleScope(String packageName)`
+
+**文件**: `services/manager-service/src/main/aidl/org/lsposed/lspd/models/Application.aidl`
+```aidl
+parcelable Application {
+    String packageName;
+    int userId;
+}
+```
+
+### 工作流程总结
+
+**完整流程**:
+1. 用户在管理器UI中勾选应用 → `ScopeAdapter.onCheckedChange()`
+2. UI层调用 → `app/ConfigManager.setModuleScope()`
+3. Binder通信 → `ILSPManagerService.setModuleScope()`
+4. Daemon处理 → `daemon/ConfigManager.setModuleScope()`
+5. 数据库更新 → 更新scope表
+6. 缓存更新 → `cacheScopes()` 更新 cachedScope
+7. 注入判断 → 应用启动时调用 `getModulesForProcess()` 根据缓存决定是否注入
+
+**缓存机制**:
+- `cachedScope`: Map<ProcessScope, List<Module>>
+  - 键: ProcessScope (processName, uid)
+  - 值: 需要注入的模块列表
+- 缓存在模块启用/禁用、作用域修改时异步更新
+
+### 技术栈
+- **语言**: Java
+- **数据库**: SQLite (使用Android原生API)
+- **IPC**: AIDL (Android Interface Definition Language)
+- **UI**: Android RecyclerView + Material Design
+- **架构**: 客户端-服务端分离
+  - app: 管理器UI (用户态)
+  - daemon: LSPosed守护进程 (system_server上下文)
+  - core: Hook注入核心 (zygote/system_server)
+
+### 修改的文件
+本次会话仅进行代码查找和分析，未修改任何文件。仅创建了本chatrules记录文件。
+
+### 下一步建议
+如需实现自定义选择应用注入功能，建议从以下方面入手：
+1. **扩展Application模型**: 可能需要添加额外字段支持更复杂的选择规则（如进程名、组件名等）
+2. **修改UI逻辑**: 在ScopeAdapter中添加自定义选择条件的UI控件
+3. **扩展数据库表**: 可能需要修改scope表结构或添加新表
+4. **更新缓存逻辑**: 修改cacheScopes()以支持新的选择规则
+5. **调整注入判断**: 修改getModulesForProcess()以应用新的匹配逻辑
+
+## 会话2: 暴露外部接口以启用模块并设置作用域 (2026-01-28)
+
+### 会话目的
+在已定位模块作用域选择实现的基础上，新增一个可供外部应用调用的接口，使其能够像管理器UI一样启用模块并选择注入目标包名。
+
+### 完成的主要任务
+1. 梳理模块启用与作用域设置的现有调用链与接口位置
+2. 设计并新增对外可调用的AIDL接口
+3. 在管理器App中实现导出Service并接入现有ConfigManager/ModuleUtil逻辑
+4. 在Manifest中声明对外权限与Service导出信息
+
+### 关键决策和解决方案
+1. **对外接口形式**: 采用导出的绑定Service + AIDL，避免直接暴露daemon层Binder
+2. **权限控制**: 新增签名级权限`${applicationId}.permission.MANAGE_MODULES`，默认只允许同签名应用调用
+3. **作用域设置**: 外部调用通过`ConfigManager.setModuleScope()`统一写入数据库与刷新缓存，并自动处理legacy模块逻辑
+4. **易用性**: 提供按包名列表设置作用域的便捷方法，外部调用无需构造复杂对象
+
+### 融合之前会话的关键发现
+- 作用域选择UI入口在`ScopeAdapter.onCheckedChange()`，最终通过`ConfigManager.setModuleScope()`进入daemon层数据库与缓存更新流程
+- AIDL服务接口在`ILSPManagerService.aidl`，daemon侧在`LSPManagerService`中直接调用`ConfigManager`
+
+### 技术栈
+- **语言**: Java
+- **IPC**: AIDL + Binder Service
+- **Android组件**: Service + Manifest权限声明
+
+### 修改的文件
+- `app/src/main/aidl/org/lsposed/manager/IExternalModuleManager.aidl`
+- `app/src/main/java/org/lsposed/manager/services/ExternalModuleManagerService.java`
+- `app/src/main/AndroidManifest.xml`
+
+## 会话3: 外部接口使用文档编写 (2026-01-28)
+
+### 会话目的
+为外部应用开发者提供调用LSPosed外部接口的使用文档，指导绑定服务、权限配置与示例代码。
+
+### 完成的主要任务
+1. 编写外部接口使用说明文档
+2. 给出AIDL文件拷贝说明与目录结构
+3. 提供Java/Kotlin示例代码与常见问题排查
+
+### 关键决策和解决方案
+1. **文档位置**: 在项目根目录新增`EXTERNAL_API.md`
+2. **可用性**: 同时提供Java与Kotlin调用样例，降低接入门槛
+3. **权限说明**: 明确签名级权限与绑定失败原因
+
+### 技术栈
+- **语言**: Markdown
+- **IPC**: AIDL + Binder Service
+- **Android组件**: Service + Manifest权限声明
+
+### 修改的文件
+- `EXTERNAL_API.md`
