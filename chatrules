@@ -165,3 +165,24 @@ parcelable Application {
 
 ### 修改的文件
 - `EXTERNAL_API.md`
+
+## 会话4: 添加构建模块与APK的GitHub Workflow (2026-01-28)
+
+### 会话目的
+确认是否存在用于编译完整模块（包含APK）的工作流，并在缺失时新增一个可手动触发的构建工作流。
+
+### 完成的主要任务
+1. 检查现有`core.yml`和`crowdin.yml`工作流
+2. 新增可手动触发的构建工作流，产出模块zip与管理器APK
+
+### 关键决策和解决方案
+1. **触发方式**: 选择`workflow_dispatch`，便于按需构建
+2. **构建任务**: 复用`zipAll`生成模块zip，并追加`app:assembleRelease`生成APK
+3. **产物输出**: 以artifact形式上传模块zip与APK
+
+### 技术栈
+- **CI**: GitHub Actions
+- **构建**: Gradle (Java 17)
+
+### 修改的文件
+- `.github/workflows/build-module.yml`

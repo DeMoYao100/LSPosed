@@ -1,0 +1,91 @@
+name: Build Module (with APK)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_BASEDIR: "${{ github.workspace }}"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - name: Write key (optional)
+        run: |
+          if [ ! -z "${{ secrets.KEY_STORE }}" ]; then
+            echo androidStorePassword='${{ secrets.KEY_STORE_PASSWORD }}' >> gradle.properties
+            echo androidKeyAlias='${{ secrets.ALIAS }}' >> gradle.properties
+            echo androidKeyPassword='${{ secrets.KEY_PASSWORD }}' >> gradle.properties
+            echo androidStoreFile='key.jks' >> gradle.properties
+            echo ${{ secrets.KEY_STORE }} | base64 --decode > key.jks
+          fi
+
+      - name: Checkout libxposed/api
+        uses: actions/checkout@v3
+        with:
+          repository: libxposed/api
+          path: libxposed/api
+
+      - name: Checkout libxposed/service
+        uses: actions/checkout@v3
+        with:
+          repository: libxposed/service
+          path: libxposed/service
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 2G
+          key: ${{ runner.os }}
+          restore-keys: ${{ runner.os }}
+
+      - name: Build dependencies
+        working-directory: libxposed
+        run: |
+          echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
+          echo 'android.native.buildOutput=verbose' >> ~/.gradle/gradle.properties
+          cd api
+          ./gradlew publishToMavenLocal
+          cd ../service
+          ./gradlew publishToMavenLocal
+
+      - name: Build module zips and APK
+        run: |
+          ./gradlew zipAll :app:assembleRelease
+
+      - name: Upload module zips
+        uses: actions/upload-artifact@v3
+        with:
+          name: lsposed-module-zips
+          path: |
+            magisk-loader/release/LSPosed-v*-riru-*.zip
+            magisk-loader/release/LSPosed-v*-zygisk-*.zip
+
+      - name: Upload manager APKs
+        uses: actions/upload-artifact@v3
+        with:
+          name: lsposed-manager-apk
+          path: |
+            app/build/outputs/apk/**/app-*.apk
