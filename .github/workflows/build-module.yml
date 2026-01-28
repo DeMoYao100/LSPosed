@@ -64,6 +64,7 @@ jobs:
         working-directory: libxposed
         run: |
           echo 'org.gradle.caching=true' >> ~/.gradle/gradle.properties
+          echo 'kotlin.jvm.target=21' >> ~/.gradle/gradle.properties
           echo 'org.gradle.parallel=true' >> ~/.gradle/gradle.properties
           echo 'org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8 -XX:+UseParallelGC' >> ~/.gradle/gradle.properties
           echo 'android.native.buildOutput=verbose' >> ~/.gradle/gradle.properties

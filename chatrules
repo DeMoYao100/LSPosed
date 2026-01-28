@@ -208,3 +208,23 @@ parcelable Application {
 
 ### 修改的文件
 - `.github/workflows/build-module.yml`
+
+## 会话6: 修复编译JVM目标不一致错误 (2026-01-28)
+
+### 会话目的
+解决GitHub Actions构建中出现的`compileJava`与`compileKotlin`目标版本不一致导致的失败。
+
+### 完成的主要任务
+1. 在构建依赖步骤中写入Kotlin JVM目标配置
+2. 使Kotlin编译目标与Java 21保持一致以通过校验
+
+### 关键决策和解决方案
+1. **兼容性修复**: 在`~/.gradle/gradle.properties`写入`kotlin.jvm.target=21`
+2. **最小改动**: 仅调整工作流，不改动源代码配置
+
+### 技术栈
+- **CI**: GitHub Actions
+- **构建**: Gradle
+
+### 修改的文件
+- `.github/workflows/build-module.yml`
