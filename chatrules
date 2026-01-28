@@ -187,19 +187,24 @@ parcelable Application {
 ### 修改的文件
 - `.github/workflows/build-module.yml`
 
-## 会话5: 更新artifact上传action版本 (2026-01-28)
+## 会话5: 调整构建Workflow为手动触发且不上传产物 (2026-01-28)
 
 ### 会话目的
-修复GitHub Actions中`actions/upload-artifact@v3`已弃用导致的构建失败问题。
+按要求调整新增的构建工作流，模仿`core.yml`编译方式，仅手动触发且不上传产物。
 
 ### 完成的主要任务
-1. 将构建工作流中的artifact上传步骤升级到`actions/upload-artifact@v4`
+1. 使构建流程与`core.yml`保持一致（包含Gradle缓存配置）
+2. 移除上传artifact步骤，仅在Action内完成编译
+3. 保留手动触发入口
 
 ### 关键决策和解决方案
-1. **兼容性修复**: 直接升级到v4以消除弃用错误
+1. **保留Gradle缓存配置**: 在依赖构建步骤写入`org.gradle.caching=true`
+2. **不上传产物**: 删除`upload-artifact`步骤
+3. **签名逻辑**: 与`core.yml`保持一致，保留写入签名配置的条件
 
 ### 技术栈
 - **CI**: GitHub Actions
+- **构建**: Gradle (Java 17)
 
 ### 修改的文件
 - `.github/workflows/build-module.yml`
