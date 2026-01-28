@@ -76,7 +76,7 @@ jobs:
           ./gradlew zipAll :app:assembleRelease
 
       - name: Upload module zips
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lsposed-module-zips
           path: |
@@ -84,7 +84,7 @@ jobs:
             magisk-loader/release/LSPosed-v*-zygisk-*.zip
 
       - name: Upload manager APKs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: lsposed-manager-apk
           path: |

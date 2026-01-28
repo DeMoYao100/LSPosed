@@ -186,3 +186,20 @@ parcelable Application {
 
 ### 修改的文件
 - `.github/workflows/build-module.yml`
+
+## 会话5: 更新artifact上传action版本 (2026-01-28)
+
+### 会话目的
+修复GitHub Actions中`actions/upload-artifact@v3`已弃用导致的构建失败问题。
+
+### 完成的主要任务
+1. 将构建工作流中的artifact上传步骤升级到`actions/upload-artifact@v4`
+
+### 关键决策和解决方案
+1. **兼容性修复**: 直接升级到v4以消除弃用错误
+
+### 技术栈
+- **CI**: GitHub Actions
+
+### 修改的文件
+- `.github/workflows/build-module.yml`
